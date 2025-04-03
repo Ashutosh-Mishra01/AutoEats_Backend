@@ -6,8 +6,8 @@ module.exports = {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         mode: 'payment',
-        success_url: `http://localhost:3000/payment/success/${order._id}`,
-        cancel_url: 'http://localhost:3000/cancel',
+        success_url: `${process.env.FRONTEND_URL}/payment/success/${order._id}`,
+        cancel_url: `${process.env.FRONTEND_URL}/cancel`,
         line_items: [
           {
             price_data: {
