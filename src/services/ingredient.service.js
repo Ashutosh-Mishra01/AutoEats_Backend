@@ -88,7 +88,8 @@ module.exports = {
         restaurant: restaurantId,
         name: ingredientName,
         category: category._id,
-      }).populate("category");;
+      }).populate("category");
+      
       if (item) {
         return item;
       }
@@ -102,11 +103,15 @@ module.exports = {
         name: ingredientName,
         restaurant: restaurantId,
         category: category._id,
-      }).populate("category");;
+      });
+      
       const savedItem = await item.save();
+      const populatedItem = await savedItem.populate("category");
+      
       category.ingredients.push(savedItem._id);
       await category.save();
-      return savedItem;
+      
+      return populatedItem;
     } catch (error) {
       throw new Error(`Failed to create ingredients item: ${error.message}`);
     }
