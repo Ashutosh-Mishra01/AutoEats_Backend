@@ -10,42 +10,42 @@ module.exports = {
   },
 
   async findCartByUserId(userId) {
-    let cart;
+    try {
+      const cart = await Cart.findOne({ customer: userId });
+      
+      if (!cart) {
+        throw new Error("Cart not found for user - " + userId);
+      }
 
-    cart = await Cart.findOne({ customer: userId }).populate([
-      {
-        path: "items",
-        populate: {
-          path: "food",
-          populate: { path: "restaurant", select: "_id" },
-        },
-      },
-    ]);
+      // Populate cart items with food and restaurant details
+      await cart.populate([
+        {
+          path: "items",
+          populate: {
+            path: "food",
+            populate: { path: "restaurant", select: "_id name" }
+          }
+        }
+      ]);
 
-    if (!cart) {
-      throw new Error("Cart not found u - ", userId);
+      let totalPrice = 0;
+      let totalItem = 0;
+
+      // Calculate totals from populated items
+      for (const item of cart.items) {
+        if (item.food) {
+          totalPrice += item.totalPrice || (item.food.price * item.quantity);
+          totalItem += item.quantity;
+        }
+      }
+
+      cart.totalPrice = totalPrice;
+      cart.totalItem = totalItem;
+
+      return cart;
+    } catch (error) {
+      throw new Error(`Error finding cart: ${error.message}`);
     }
-
-    let cartItems = await CartItem.find({ cart: cart._id }).populate("food");
-
-
-    let totalPrice = 0;
-    let totalDiscountedPrice = 0;
-    let totalItem = 0;
-
-    for (const item of cart.items) {
-      totalPrice += item.price;
-      totalDiscountedPrice += item.discountedPrice;
-      totalItem += item.quantity;
-    }
-
-    cart.totalPrice = totalPrice;
-    cart.totalItem = totalItem;
-    cart.totalDiscountedPrice = totalDiscountedPrice;
-    cart.discounte = totalPrice - totalDiscountedPrice;
-
-    // const updatedCart = await cart.save();
-    return cart;
   },
 
   async addItemToCart(req, userId) {
@@ -60,12 +60,15 @@ module.exports = {
         throw new Error("Food item not found");
       }
 
+      // Check for existing item with same food and ingredients
       const isPresent = await CartItem.findOne({
         cart: cart._id,
-        food: food._id
+        food: food._id,
+        ingredients: { $eq: req.ingredients || [] } // Compare ingredients array exactly
       });
 
       if (!isPresent) {
+        // Create new cart item
         const cartItem = new CartItem({
           food: food._id,
           cart: cart._id,
@@ -75,10 +78,10 @@ module.exports = {
         });
 
         const createdCartItem = await cartItem.save();
-        const populatedCartItem = await createdCartItem.populate({
+        const populatedCartItem = await createdCartItem.populate([{
           path: "food",
           populate: { path: "restaurant", select: "_id name" }
-        });
+        }]);
 
         cart.items.push(createdCartItem);
         await cart.save();
@@ -86,16 +89,15 @@ module.exports = {
         return populatedCartItem;
       }
 
-      // If item exists, update quantity and ingredients
+      // If exact same item exists (same food and ingredients), update quantity
       isPresent.quantity += (req.quantity || 1);
-      isPresent.ingredients = req.ingredients || isPresent.ingredients;
       isPresent.totalPrice = food.price * isPresent.quantity;
       
       await isPresent.save();
-      const updatedItem = await isPresent.populate({
+      const updatedItem = await isPresent.populate([{
         path: "food",
         populate: { path: "restaurant", select: "_id name" }
-      });
+      }]);
       
       return updatedItem;
     } catch (error) {
