@@ -93,10 +93,7 @@ module.exports = {
       const restaurant = await Restaurant.findOne({ owner: userId })
         .populate("owner")
         .populate("address");
-      if (!restaurant) {
-        throw new Error(`Restaurant for user with id ${userId} not found`);
-      }
-      return restaurant;
+      return restaurant || null;
     } catch (error) {
       throw new Error(`Error finding restaurant by user id: ${error.message}`);
     }
