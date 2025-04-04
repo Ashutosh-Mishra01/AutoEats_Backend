@@ -49,31 +49,58 @@ module.exports = {
   },
 
   async addItemToCart(req, userId) {
-    const cart = await Cart.findOne({ customer: userId });
-    const food = await Food.findById(req.menuItemId);
+    try {
+      const cart = await Cart.findOne({ customer: userId });
+      if (!cart) {
+        throw new Error("Cart not found for user");
+      }
 
-    const isPresent = await CartItem.findOne({
-      cart: cart._id,
-      food: food._id,
-      userId,
-    });
+      const food = await Food.findById(req.menuItemId);
+      if (!food) {
+        throw new Error("Food item not found");
+      }
 
-    if (!isPresent) {
-      const cartItem = new CartItem({
-        food: food._id,
+      const isPresent = await CartItem.findOne({
         cart: cart._id,
-        quantity: 1,
-        userId,
-        totalPrice: food.price,
+        food: food._id
       });
 
-      const createdCartItem = await cartItem.save();
-      cart.items.push(createdCartItem);
-      await cart.save();
-      return createdCartItem;
+      if (!isPresent) {
+        const cartItem = new CartItem({
+          food: food._id,
+          cart: cart._id,
+          quantity: req.quantity || 1,
+          ingredients: req.ingredients || [],
+          totalPrice: food.price * (req.quantity || 1)
+        });
+
+        const createdCartItem = await cartItem.save();
+        const populatedCartItem = await createdCartItem.populate({
+          path: "food",
+          populate: { path: "restaurant", select: "_id name" }
+        });
+
+        cart.items.push(createdCartItem);
+        await cart.save();
+        
+        return populatedCartItem;
+      }
+
+      // If item exists, update quantity and ingredients
+      isPresent.quantity += (req.quantity || 1);
+      isPresent.ingredients = req.ingredients || isPresent.ingredients;
+      isPresent.totalPrice = food.price * isPresent.quantity;
+      
+      await isPresent.save();
+      const updatedItem = await isPresent.populate({
+        path: "food",
+        populate: { path: "restaurant", select: "_id name" }
+      });
+      
+      return updatedItem;
+    } catch (error) {
+      throw new Error(`Failed to add item to cart: ${error.message}`);
     }
-    return isPresent;
-    // return 'Item added to cart';
   },
 
   async updateCartItemQuantity(cartItemId, quantity) {
