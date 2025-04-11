@@ -23,24 +23,25 @@ module.exports = {
             
             // Handle the address ID
             if (order.deliveryAddress._id) {
-                // Convert string ID to ObjectId safely
-                try {
-                    const addressId = new mongoose.Types.ObjectId(order.deliveryAddress._id);
-                    
-                    // Verify the address exists and belongs to the user
-                    const addressExists = user.addresses.some(addr => 
-                        addr.toString() === addressId.toString()
-                    );
-                    
-                    if (!addressExists) {
-                        throw new Error('Address not found in user\'s saved addresses');
-                    }
-                    
-                    // Update the order object with the converted ObjectId
-                    order.deliveryAddress._id = addressId;
-                } catch (error) {
-                    throw new Error('Invalid address ID format');
+                // Find the address in user's saved addresses
+                const userWithAddresses = await User.findById(user._id)
+                    .populate('addresses')
+                    .exec();
+                
+                if (!userWithAddresses || !userWithAddresses.addresses) {
+                    throw new Error('User addresses not found');
                 }
+                
+                const selectedAddress = userWithAddresses.addresses.find(addr => 
+                    addr._id.toString() === order.deliveryAddress._id
+                );
+                
+                if (!selectedAddress) {
+                    throw new Error('Address not found in user\'s saved addresses');
+                }
+                
+                // Use the full address object from the database
+                order.deliveryAddress = selectedAddress;
             }
             
             // Create the order
