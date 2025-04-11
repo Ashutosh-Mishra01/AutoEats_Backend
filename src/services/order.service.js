@@ -19,24 +19,13 @@ module.exports = {
     try {
       console.log("Creating order with raw data:", JSON.stringify(order));
       
-      // 1. Process the delivery address - use the ID directly
+      // 1. Process the delivery address
       let addressId;
       
       if (order.deliveryAddress && order.deliveryAddress._id) {
-        // Simply use the address ID directly - no validation
-        addressId = mongoose.Types.ObjectId(order.deliveryAddress._id);
-        console.log("Using address ID directly:", addressId);
-        
-        // The error happens here - we're no longer validating if the address exists
-        // Instead, just force-add it to make sure (without throwing errors)
-        try {
-          await User.findByIdAndUpdate(
-            user._id,
-            { $addToSet: { addresses: addressId } }
-          );
-        } catch (error) {
-          console.log("Note: Couldn't update user addresses, but continuing");
-        }
+        // Use existing address ID
+        addressId = order.deliveryAddress._id;
+        console.log("Using existing address ID:", addressId);
       } else if (order.deliveryAddress) {
         // This is a new address to be created
         const newAddress = new Address({
@@ -51,14 +40,9 @@ module.exports = {
         // Save the new address
         const savedAddress = await newAddress.save();
         
-        // Add to user's addresses but don't check for errors
-        try {
-          user.addresses.push(savedAddress._id);
-          await user.save();
-        } catch (err) {
-          console.error("Error saving user address, but continuing:", err);
-          // Continue anyway - don't throw error
-        }
+        // Add to user's addresses
+        user.addresses.push(savedAddress._id);
+        await user.save();
         
         addressId = savedAddress._id;
         console.log("Created new address with ID:", addressId);
