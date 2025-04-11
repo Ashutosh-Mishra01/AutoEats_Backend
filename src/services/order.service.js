@@ -23,9 +23,15 @@ module.exports = {
       let addressId;
       
       if (order.deliveryAddress && order.deliveryAddress._id) {
-        // Use existing address ID
+        // Use existing address ID - it's already validated and converted to ObjectId in the controller
         addressId = order.deliveryAddress._id;
-        console.log("Using existing address ID:", addressId);
+        console.log("Using existing address ID:", addressId.toString());
+        
+        // Verify address still exists in database
+        const existingAddress = await Address.findById(addressId);
+        if (!existingAddress) {
+          throw new Error("Selected address not found in database");
+        }
       } else if (order.deliveryAddress) {
         // This is a new address to be created
         const newAddress = new Address({
@@ -40,12 +46,17 @@ module.exports = {
         // Save the new address
         const savedAddress = await newAddress.save();
         
-        // Add to user's addresses
-        user.addresses.push(savedAddress._id);
-        await user.save();
+        // Add to user's addresses if not already present
+        if (!user.addresses) {
+          user.addresses = [];
+        }
+        if (!user.addresses.includes(savedAddress._id)) {
+          user.addresses.push(savedAddress._id);
+          await user.save();
+        }
         
         addressId = savedAddress._id;
-        console.log("Created new address with ID:", addressId);
+        console.log("Created new address with ID:", addressId.toString());
       } else {
         throw new Error("No delivery address provided");
       }
@@ -73,6 +84,7 @@ module.exports = {
           food: cartItem.food._id,
           quantity: cartItem.quantity,
           totalPrice: cartItem.food.price * cartItem.quantity,
+          ingredients: cartItem.ingredients || []
         });
         
         const savedOrderItem = await orderItem.save();

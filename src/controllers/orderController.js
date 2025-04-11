@@ -7,68 +7,65 @@ module.exports = {
     createOrder: async (req, res) => {
         try {
             const order = req.body;
-            const userId = req.user._id;
+            const user = req.user;
             
-            if (!order) throw new Error('Please provide valid request body');
-            
-            // Log the incoming data
             console.log("Received order data:", JSON.stringify(order));
-            console.log("User ID:", userId);
+            console.log("User ID:", user._id);
             
-            // Handle the address
-            if (order.deliveryAddress && order.deliveryAddress._id) {
-                // Ensure address ID is a valid ObjectId
-                const addressId = mongoose.Types.ObjectId.isValid(order.deliveryAddress._id) 
-                    ? mongoose.Types.ObjectId(order.deliveryAddress._id) 
-                    : null;
-                
-                if (!addressId) {
-                    throw new Error(`Invalid address ID: ${order.deliveryAddress._id}`);
+            // Validate required fields
+            if (!order.restaurantId) {
+                throw new Error('Restaurant ID is required');
+            }
+            
+            if (!order.deliveryAddress) {
+                throw new Error('Delivery address is required');
+            }
+            
+            // Handle the address ID
+            if (order.deliveryAddress._id) {
+                // Convert string ID to ObjectId safely
+                try {
+                    const addressId = new mongoose.Types.ObjectId(order.deliveryAddress._id);
+                    
+                    // Verify the address exists and belongs to the user
+                    const addressExists = user.addresses.some(addr => 
+                        addr.toString() === addressId.toString()
+                    );
+                    
+                    if (!addressExists) {
+                        throw new Error('Address not found in user\'s saved addresses');
+                    }
+                    
+                    // Update the order object with the converted ObjectId
+                    order.deliveryAddress._id = addressId;
+                } catch (error) {
+                    throw new Error('Invalid address ID format');
                 }
-                
-                console.log("Using address ID:", addressId);
-                
-                // CRITICAL: Update the order object to use the ObjectId
-                order.deliveryAddress._id = addressId;
-                
-                // Force-add the address to the user in MongoDB
-                await User.findByIdAndUpdate(
-                    userId,
-                    { $addToSet: { addresses: addressId } }
-                );
-                
-                console.log(`Added address ${addressId} to user ${userId}`);
             }
             
-            // Get a fresh copy of the user with the updated addresses
-            const freshUser = await User.findById(userId);
-            if (!freshUser) {
-                throw new Error(`User not found with ID ${userId}`);
-            }
-            
-            console.log("User addresses:", freshUser.addresses.map(addr => addr.toString()));
-            
-            // Create the order with the fresh user
-            const paymentResponse = await orderService.createOrder(order, freshUser);
+            // Create the order
+            const paymentResponse = await orderService.createOrder(order, user);
             res.status(200).json(paymentResponse);
+            
         } catch (error) {
-            console.error("Order controller error:", error);
-            const errorMessage = error.message || 'Unknown error';
-            res.status(400).json({ error: errorMessage });
+            console.error("Order creation error:", error);
+            res.status(400).json({ 
+                error: true,
+                message: error.message || 'Failed to create order'
+            });
         }
     },
 
     getAllUserOrders: async (req, res) => {
         try {
-            user=req.user
+            const user = req.user;
             const userOrders = await orderService.getUserOrders(user._id);
             res.status(200).json(userOrders);
         } catch (error) {
-            if (error instanceof Error) {
-                res.status(400).json({ error: error.message });
-            } else {
-                res.status(500).json({ error: 'Internal server error' });
-            }
+            res.status(400).json({ 
+                error: true,
+                message: error.message || 'Failed to get user orders'
+            });
         }
     }
 };
